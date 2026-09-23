@@ -56,7 +56,10 @@ download_recovery(){
             local FILEBIN_LINK
             local FILEBIN_BIN="${BASH_REMATCH[1]}"
 
-            FILEBIN_PAGE="$(curl -fsSL "${RECOVERY_LINK}")"
+            if ! FILEBIN_PAGE="$(curl -fsSL "${RECOVERY_LINK}")"; then
+                echo -e "${BOLD}${RED}Unable to fetch the Filebin page:${RESET} ${BOLD}${RECOVERY_LINK}${RESET}\n"
+                exit 1
+            fi
             FILEBIN_LINK="$(printf '%s' "${FILEBIN_PAGE}" | grep -oE "https?://filebin\\.net/${FILEBIN_BIN}/[^\"'<> ]+" | head -n1)"
 
             if [ -z "${FILEBIN_LINK}" ]; then
@@ -77,7 +80,7 @@ download_recovery(){
         [ -z "${DOWNLOAD_NAME}" ] && DOWNLOAD_NAME="downloaded-recovery"
         DOWNLOADED_FILE="${WDIR}/recovery/${DOWNLOAD_NAME}"
 
-        curl -L "${RECOVERY_LINK}" -o "${DOWNLOADED_FILE}"
+        curl -fL "${RECOVERY_LINK}" -o "${DOWNLOADED_FILE}"
     elif [ -f "${RECOVERY_LINK}" ]; then
         DOWNLOAD_NAME="$(basename "${RECOVERY_LINK}")"
         DOWNLOADED_FILE="${WDIR}/recovery/${DOWNLOAD_NAME}"
