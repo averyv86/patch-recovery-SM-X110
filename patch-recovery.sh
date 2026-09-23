@@ -60,26 +60,30 @@ download_recovery(){
                 echo -e "${BOLD}${RED}Unable to fetch the Filebin page:${RESET} ${BOLD}${RECOVERY_LINK}${RESET}\n"
                 exit 1
             fi
-            FILEBIN_LINK="$(printf '%s' "${FILEBIN_PAGE}" | grep -oE "https?://filebin\\.net/${FILEBIN_BIN}/[^\"'<> ]+" | head -n1)"
+            FILEBIN_LINK="$(printf '%s' "${FILEBIN_PAGE}" | grep -oE 'https?://filebin\.net/[^"'\''<> ]+' | grep -m1 -F "/${FILEBIN_BIN}/" || true)"
 
             if [ -z "${FILEBIN_LINK}" ]; then
-                FILEBIN_LINK="$(printf '%s' "${FILEBIN_PAGE}" | grep -oE "/${FILEBIN_BIN}/[^\"'<> ]+" | head -n1)"
+                FILEBIN_LINK="$(printf '%s' "${FILEBIN_PAGE}" | grep -oE '/[^"'\''<> ]+' | grep -m1 -F "/${FILEBIN_BIN}/" || true)"
                 [ -n "${FILEBIN_LINK}" ] && FILEBIN_LINK="https://filebin.net${FILEBIN_LINK}"
             fi
 
-            if [[ "${FILEBIN_LINK}" =~ ^https?://filebin\.net/${FILEBIN_BIN}/[^/?#]+([?#].*)?$ ]]; then
+            case "${FILEBIN_LINK}" in
+                https://filebin.net/"${FILEBIN_BIN}"/*|http://filebin.net/"${FILEBIN_BIN}"/*)
                 echo -e "${LIGHT_YELLOW}[INFO] Resolved Filebin page to:${RESET} ${BOLD}${FILEBIN_LINK}${RESET}\n"
                 RECOVERY_LINK="${FILEBIN_LINK}"
-            elif [ -n "${FILEBIN_LINK}" ]; then
+                ;;
+            "")
+                ;;
+            *)
                 echo -e "${BOLD}${RED}Resolved Filebin URL is invalid:${RESET} ${BOLD}${FILEBIN_LINK}${RESET}\n"
                 exit 1
-            fi
+                ;;
+            esac
         fi
 
         echo -e "${LIGHT_YELLOW}[INFO] Downloading:${RESET} ${BOLD}${RECOVERY_LINK}${RESET}\n"
 
-        DOWNLOAD_NAME="$(basename "${RECOVERY_LINK%%\?*}")"
-        DOWNLOAD_NAME="${DOWNLOAD_NAME%%\#*}"
+        DOWNLOAD_NAME="$(basename "${RECOVERY_LINK%%[\?#]*}")"
         [ -z "${DOWNLOAD_NAME}" ] && DOWNLOAD_NAME="downloaded-recovery"
         DOWNLOADED_FILE="${WDIR}/recovery/${DOWNLOAD_NAME}"
 
@@ -118,12 +122,30 @@ unarchive_recovery(){
         echo -e "${BOLD}${RED}Please provide a direct .img, .lz4, or .zip download URL instead of a webpage link.${RESET}\n"
         exit 1
     elif unzip -tqq "${FILE}" >/dev/null 2>&1; then
-        if unzip -Z1 "${FILE}" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
-            echo -e "${BOLD}${RED}Unsafe ZIP archive paths detected in:${RESET} ${BOLD}${FILE}${RESET}\n"
-            exit 1
-        fi
-        if zipinfo -l "${FILE}" | awk 'NR >= 3 && $1 ~ /^l/ { found = 1 } END { exit !found }'; then
-            echo -e "${BOLD}${RED}ZIP archives containing symlinks are not supported:${RESET} ${BOLD}${FILE}${RESET}\n"
+        if ! python3 - "${FILE}" <<'PY'
+import pathlib
+import stat
+import sys
+import zipfile
+
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    for info in archive.infolist():
+        name = info.filename
+        path = pathlib.PurePosixPath(name)
+        parts = path.parts
+        normalized = name.rstrip("/")
+
+        if name.startswith("/") or any(part == ".." for part in parts):
+            sys.exit(1)
+        if normalized.startswith("-"):
+            sys.exit(1)
+        if "/" in normalized:
+            sys.exit(1)
+        if stat.S_ISLNK(info.external_attr >> 16):
+            sys.exit(1)
+PY
+        then
+            echo -e "${BOLD}${RED}ZIP archive contains unsupported paths or symlink entries:${RESET} ${BOLD}${FILE}${RESET}\n"
             exit 1
         fi
         unzip -o "${FILE}" && rm "${FILE}"
