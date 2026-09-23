@@ -51,7 +51,7 @@ download_recovery(){
 
     echo -e "${LIGHT_YELLOW}[INFO] Downloading:${RESET} ${BOLD}${RECOVERY_LINK}${RESET}\n"
 
-    curl -L "${RECOVERY_LINK}" -o "${WDIR}/recovery/$(basename "${RECOVERY_LINK}")"
+    curl -fL "${RECOVERY_LINK}" -o "${WDIR}/recovery/downloaded_recovery"
     elif [ -f "${RECOVERY_LINK}" ]; then
     cp "${RECOVERY_LINK}" "${WDIR}/recovery/"
     else
@@ -66,13 +66,40 @@ unarchive_recovery(){
 
     set -x 
     cd "${WDIR}/recovery/"
-    local FILE=$(ls)
-    [[ "$FILE" == *.zip ]] && unzip "$FILE" && rm "$FILE"
-    [[ "$FILE" == *.lz4 ]] && lz4 -d "$FILE" "${FILE%.lz4}" && rm "$FILE"
+    local FILE="$(find . -maxdepth 1 -type f ! -name '.gitkeep' | head -n1)"
+    local FILE_MIME
+    local FILE_TYPE
+
+    if [ -z "${FILE}" ]; then
+        echo -e "${BOLD}${RED}No recovery file was downloaded or copied.${RESET}\n"
+        exit 1
+    fi
+
+    FILE_MIME="$(file -b --mime-type "$FILE")"
+    FILE_TYPE="$(file -b "$FILE")"
+
+    if [[ "${FILE_MIME}" == "text/html" ]]; then
+        echo -e "${BOLD}${RED}Downloaded file is HTML instead of a recovery image/archive.${RESET}\n"
+        echo -e "${BOLD}${RED}Please provide a direct download link to the actual .img, .lz4, or .zip file.${RESET}\n"
+        exit 1
+    fi
+
+    [[ "${FILE_MIME}" == "application/zip" ]] && unzip "$FILE" && rm "$FILE"
+    [[ "${FILE_TYPE}" == LZ4\ compressed\ data* ]] && lz4 -d "$FILE" "recovery.img" && rm "$FILE"
 
     # Only rename if recovery.img doesn't exists
     if [ ! -f recovery.img ]; then
-        mv "$(ls *.img)" "recovery.img"
+        local IMG_FILE
+        IMG_FILE="$(find . -maxdepth 1 -type f ! -name '.gitkeep' -name '*.img' | head -n1)"
+
+        if [ -n "${IMG_FILE}" ]; then
+            mv "${IMG_FILE}" "recovery.img"
+        elif [[ "${FILE_MIME}" != text/* ]]; then
+            mv "${FILE}" "recovery.img"
+        else
+            echo -e "${BOLD}${RED}Unable to locate a recovery image after download/extraction.${RESET}\n"
+            exit 1
+        fi
     fi
 
     cd "${WDIR}/"
