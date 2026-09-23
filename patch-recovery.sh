@@ -122,9 +122,13 @@ unarchive_recovery(){
         echo -e "${BOLD}${RED}Downloaded file is not a direct recovery image or archive.${RESET}\n"
         echo -e "${BOLD}${RED}Please provide a direct .img, .lz4, or .zip download URL instead of a webpage link.${RESET}\n"
         exit 1
-    elif [[ "${FILE_MIME}" == "application/zip" ]] || [[ "${FILE_INFO}" == Zip\ archive\ data* ]] || { command -v unzip >/dev/null 2>&1 && unzip -tqq "${FILE}" >/dev/null 2>&1; }; then
+    elif [[ "${FILE_MIME}" == "application/zip" ]] || [[ "${FILE_INFO}" == Zip\ archive\ data* ]]; then
         if ! command -v unzip >/dev/null 2>&1; then
             echo -e "${BOLD}${RED}Missing required tool:${RESET} ${BOLD}unzip${RESET}\n"
+            exit 1
+        fi
+        if ! unzip -tqq "${FILE}" >/dev/null 2>&1; then
+            echo -e "${BOLD}${RED}Failed to validate ZIP archive:${RESET} ${BOLD}${FILE}${RESET}\n"
             exit 1
         fi
         if ! python3 - "${FILE}" <<'PY'
