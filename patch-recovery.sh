@@ -67,9 +67,12 @@ download_recovery(){
                 [ -n "${FILEBIN_LINK}" ] && FILEBIN_LINK="https://filebin.net${FILEBIN_LINK}"
             fi
 
-            if [ -n "${FILEBIN_LINK}" ]; then
+            if [[ "${FILEBIN_LINK}" =~ ^https?://filebin\.net/${FILEBIN_BIN}/[^/?#]+([?#].*)?$ ]]; then
                 echo -e "${LIGHT_YELLOW}[INFO] Resolved Filebin page to:${RESET} ${BOLD}${FILEBIN_LINK}${RESET}\n"
                 RECOVERY_LINK="${FILEBIN_LINK}"
+            elif [ -n "${FILEBIN_LINK}" ]; then
+                echo -e "${BOLD}${RED}Resolved Filebin URL is invalid:${RESET} ${BOLD}${FILEBIN_LINK}${RESET}\n"
+                exit 1
             fi
         fi
 
@@ -120,6 +123,10 @@ unarchive_recovery(){
         local OUTPUT_FILE="${FILE%.lz4}"
         [[ "${OUTPUT_FILE}" == "${FILE}" ]] && OUTPUT_FILE="recovery.img"
         lz4 -d "${FILE}" "${OUTPUT_FILE}" && rm "${FILE}"
+    elif [[ "${FILE}" != *.img ]] && [[ "${FILE}" != "recovery.img" ]]; then
+        echo -e "${BOLD}${RED}Unsupported recovery file type:${RESET} ${BOLD}${FILE}${RESET}\n"
+        echo -e "${BOLD}${RED}Please provide a direct .img, .lz4, or .zip download URL.${RESET}\n"
+        exit 1
     fi
 
     # Only rename if recovery.img doesn't exists
