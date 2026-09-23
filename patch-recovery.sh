@@ -51,9 +51,9 @@ download_recovery(){
 
     echo -e "${LIGHT_YELLOW}[INFO] Downloading:${RESET} ${BOLD}${RECOVERY_LINK}${RESET}\n"
 
-    curl -L "${RECOVERY_LINK}" -o "${WDIR}/recovery/$(basename "${RECOVERY_LINK}")"
+    curl -fL "${RECOVERY_LINK}" -o "${WDIR}/recovery/downloaded_recovery"
     elif [ -f "${RECOVERY_LINK}" ]; then
-    cp "${RECOVERY_LINK}" "${WDIR}/recovery/"
+    cp "${RECOVERY_LINK}" "${WDIR}/recovery/downloaded_recovery"
     else
     echo -e "${BOLD}${RED}Invalid input: not a URL or file.${RESET}\n"
     echo -e "${BOLD}${RED}If you entered a URL, make sure it begins with 'http://' or 'https://'${RESET}\n"
@@ -66,13 +66,45 @@ unarchive_recovery(){
 
     set -x 
     cd "${WDIR}/recovery/"
-    local FILE=$(ls)
-    [[ "$FILE" == *.zip ]] && unzip "$FILE" && rm "$FILE"
-    [[ "$FILE" == *.lz4 ]] && lz4 -d "$FILE" "${FILE%.lz4}" && rm "$FILE"
+    local FILE="./downloaded_recovery"
+    local FILE_MIME
+    local FILE_TYPE
+    local EXTRACTED_ARCHIVE=0
+
+    if [ ! -f "${FILE}" ]; then
+        echo -e "${BOLD}${RED}No recovery file was downloaded or copied.${RESET}\n"
+        exit 1
+    fi
+
+    FILE_MIME="$(file -b --mime-type "$FILE")"
+    FILE_TYPE="$(file -b "$FILE")"
+
+    if [[ "${FILE_MIME}" == "text/html" ]]; then
+        echo -e "${BOLD}${RED}Downloaded file is HTML instead of a recovery image/archive.${RESET}\n"
+        echo -e "${BOLD}${RED}Please provide a direct download link to the actual .img, .lz4, or .zip file.${RESET}\n"
+        exit 1
+    fi
+
+    if [[ "${FILE_MIME}" == "application/zip" ]]; then
+        unzip "$FILE" && rm "$FILE"
+        EXTRACTED_ARCHIVE=1
+    fi
+
+    [[ "${FILE_TYPE}" == LZ4\ compressed\ data* ]] && lz4 -d "$FILE" "recovery.img" && rm "$FILE"
 
     # Only rename if recovery.img doesn't exists
     if [ ! -f recovery.img ]; then
-        mv "$(ls *.img)" "recovery.img"
+        local IMG_FILE
+        IMG_FILE="$(find . -maxdepth 1 -type f ! -name '.gitkeep' -name '*.img' | head -n1)"
+
+        if [ -n "${IMG_FILE}" ]; then
+            mv "${IMG_FILE}" "recovery.img"
+        elif [ "${EXTRACTED_ARCHIVE}" -eq 0 ] && [[ "${FILE_MIME}" != text/* ]]; then
+            mv "${FILE}" "recovery.img"
+        else
+            echo -e "${BOLD}${RED}Unable to locate a recovery image after download/extraction.${RESET}\n"
+            exit 1
+        fi
     fi
 
     cd "${WDIR}/"
