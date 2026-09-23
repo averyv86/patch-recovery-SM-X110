@@ -129,6 +129,7 @@ import sys
 import zipfile
 
 with zipfile.ZipFile(sys.argv[1]) as archive:
+    seen = set()
     for info in archive.infolist():
         name = info.filename
         path = pathlib.PurePosixPath(name)
@@ -143,6 +144,9 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
             sys.exit(1)
         if stat.S_ISLNK(info.external_attr >> 16):
             sys.exit(1)
+        if normalized in seen:
+            sys.exit(1)
+        seen.add(normalized)
 PY
         then
             echo -e "${BOLD}${RED}ZIP archive contains unsupported paths or symlink entries:${RESET} ${BOLD}${FILE}${RESET}\n"
