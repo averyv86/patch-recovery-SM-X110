@@ -145,10 +145,14 @@ unarchive_recovery(){
         IMG_COUNT="$(find . -maxdepth 1 -type f -name '*.img' | wc -l)"
 
         if [ -n "${IMG_FILE}" ]; then
-            mv "${IMG_FILE}" "recovery.img"
+            if [ "${IMG_FILE}" != "./recovery.img" ] && [ "${IMG_FILE}" != "recovery.img" ]; then
+                mv -- "${IMG_FILE}" "recovery.img"
+            fi
         elif [ "${IMG_COUNT}" = "1" ]; then
             IMG_FILE="$(find . -maxdepth 1 -type f -name '*.img' -print -quit)"
-            mv "${IMG_FILE}" "recovery.img"
+            if [ "${IMG_FILE}" != "./recovery.img" ] && [ "${IMG_FILE}" != "recovery.img" ]; then
+                mv -- "${IMG_FILE}" "recovery.img"
+            fi
         elif [ "${IMG_COUNT}" -gt 1 ]; then
             echo -e "${BOLD}${RED}Found multiple .img files in the downloaded archive.${RESET}\n"
             echo -e "${BOLD}${RED}Please provide an archive that contains only the recovery image or a direct recovery image URL.${RESET}\n"
