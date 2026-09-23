@@ -188,16 +188,14 @@ PY
         fi
         rm -- "${FILE}"
 
-        local EXTRACTED_DIR
-        local EXTRACTED_DIR_COUNT
-        local EXTRACTED_FILE_COUNT
-        EXTRACTED_DIR="$(find . -mindepth 1 -maxdepth 1 -type d -print -quit)"
-        EXTRACTED_DIR_COUNT="$(find . -mindepth 1 -maxdepth 1 -type d | wc -l)"
-        EXTRACTED_FILE_COUNT="$(find . -mindepth 1 -maxdepth 1 -type f | wc -l)"
+        local EXTRACTED_DIRS=()
+        local EXTRACTED_FILES=()
+        mapfile -t EXTRACTED_DIRS < <(find . -mindepth 1 -maxdepth 1 -type d -print)
+        mapfile -t EXTRACTED_FILES < <(find . -mindepth 1 -maxdepth 1 -type f -print)
 
-        if [ "${EXTRACTED_DIR_COUNT}" = "1" ] && [ "${EXTRACTED_FILE_COUNT}" = "0" ] && [ -n "${EXTRACTED_DIR}" ]; then
-            find "${EXTRACTED_DIR}" -mindepth 1 -maxdepth 1 -exec mv -- {} . \;
-            rmdir "${EXTRACTED_DIR}"
+        if [ "${#EXTRACTED_DIRS[@]}" -eq 1 ] && [ "${#EXTRACTED_FILES[@]}" -eq 0 ]; then
+            find "${EXTRACTED_DIRS[0]}" -mindepth 1 -maxdepth 1 -exec mv -- {} . \;
+            rmdir "${EXTRACTED_DIRS[0]}"
         fi
     elif [[ "${FILE_MIME}" == "application/x-lz4" ]] || [[ "${FILE_INFO}" == LZ4\ compressed\ data* ]] || [[ "${FILE}" == *.lz4 ]]; then
         local OUTPUT_FILE="${FILE%.lz4}"
@@ -217,14 +215,9 @@ PY
     if [ ! -f recovery.img ]; then
         local IMG_FILE
         local IMG_COUNT
-        IMG_FILE="$(find . -maxdepth 1 -type f -name 'recovery.img' -print -quit)"
         IMG_COUNT="$(find . -maxdepth 1 -type f -name '*.img' | wc -l)"
 
-        if [ -n "${IMG_FILE}" ]; then
-            if [ "${IMG_FILE}" != "./recovery.img" ] && [ "${IMG_FILE}" != "recovery.img" ]; then
-                mv -- "${IMG_FILE}" "recovery.img"
-            fi
-        elif [ "${IMG_COUNT}" = "1" ]; then
+        if [ "${IMG_COUNT}" = "1" ]; then
             IMG_FILE="$(find . -maxdepth 1 -type f -name '*.img' -print -quit)"
             if [ "${IMG_FILE}" != "./recovery.img" ] && [ "${IMG_FILE}" != "recovery.img" ]; then
                 mv -- "${IMG_FILE}" "recovery.img"
