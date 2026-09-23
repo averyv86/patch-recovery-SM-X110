@@ -122,7 +122,11 @@ unarchive_recovery(){
         echo -e "${BOLD}${RED}Downloaded file is not a direct recovery image or archive.${RESET}\n"
         echo -e "${BOLD}${RED}Please provide a direct .img, .lz4, or .zip download URL instead of a webpage link.${RESET}\n"
         exit 1
-    elif unzip -tqq "${FILE}" >/dev/null 2>&1; then
+    elif [[ "${FILE_MIME}" == "application/zip" ]] || [[ "${FILE_INFO}" == Zip\ archive\ data* ]] || { command -v unzip >/dev/null 2>&1 && unzip -tqq "${FILE}" >/dev/null 2>&1; }; then
+        if ! command -v unzip >/dev/null 2>&1; then
+            echo -e "${BOLD}${RED}Missing required tool:${RESET} ${BOLD}unzip${RESET}\n"
+            exit 1
+        fi
         if ! python3 - "${FILE}" <<'PY'
 import pathlib
 import stat
@@ -198,6 +202,10 @@ PY
             SEARCH_DIR="${EXTRACTED_DIRS[0]}"
         fi
     elif [[ "${FILE_MIME}" == "application/x-lz4" ]] || [[ "${FILE_INFO}" == LZ4\ compressed\ data* ]]; then
+        if ! command -v lz4 >/dev/null 2>&1; then
+            echo -e "${BOLD}${RED}Missing required tool:${RESET} ${BOLD}lz4${RESET}\n"
+            exit 1
+        fi
         local OUTPUT_FILE="${FILE%.lz4}"
         [[ "${OUTPUT_FILE}" == "${FILE}" ]] && OUTPUT_FILE="recovery.img"
         if ! lz4 -d "${FILE}" "${OUTPUT_FILE}"; then
