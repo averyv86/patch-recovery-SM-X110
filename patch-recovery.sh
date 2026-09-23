@@ -97,16 +97,16 @@ unarchive_recovery(){
     local FILE_MIME
     FILE_MIME="$(file -b --mime-type "${FILE}")"
 
-    if [[ "${FILE}" == *.zip ]] || [[ "${FILE_INFO}" == Zip\ archive\ data* ]]; then
+    if [[ "${FILE_INFO}" == HTML\ document* ]] || [[ "${FILE_INFO}" == XML\ 1.0\ document* ]] || [[ "${FILE_MIME}" == "text/html" ]] || [[ "${FILE_MIME}" == "application/xhtml+xml" ]] || [[ "${FILE_MIME}" == "text/xml" ]]; then
+        echo -e "${BOLD}${RED}Downloaded file is not a direct recovery image or archive.${RESET}\n"
+        echo -e "${BOLD}${RED}Please provide a direct .img, .lz4, or .zip download URL instead of a webpage link.${RESET}\n"
+        exit 1
+    elif [[ "${FILE}" == *.zip ]] || [[ "${FILE_INFO}" == Zip\ archive\ data* ]]; then
         unzip -o "${FILE}" && rm "${FILE}"
     elif [[ "${FILE}" == *.lz4 ]] || [[ "${FILE_INFO}" == LZ4\ compressed\ data* ]]; then
         local OUTPUT_FILE="${FILE%.lz4}"
         [[ "${OUTPUT_FILE}" == "${FILE}" ]] && OUTPUT_FILE="recovery.img"
         lz4 -d "${FILE}" "${OUTPUT_FILE}" && rm "${FILE}"
-    elif [[ "${FILE_INFO}" == HTML\ document* ]] || [[ "${FILE_INFO}" == XML\ 1.0\ document* ]] || [[ "${FILE_MIME}" == "text/html" ]] || [[ "${FILE_MIME}" == "application/xhtml+xml" ]] || [[ "${FILE_MIME}" == "text/xml" ]]; then
-        echo -e "${BOLD}${RED}Downloaded file is not a direct recovery image or archive.${RESET}\n"
-        echo -e "${BOLD}${RED}Please provide a direct .img, .lz4, or .zip download URL instead of a webpage link.${RESET}\n"
-        exit 1
     fi
 
     # Only rename if recovery.img doesn't exists
