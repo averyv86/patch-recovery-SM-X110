@@ -114,7 +114,7 @@ unarchive_recovery(){
         echo -e "${BOLD}${RED}Downloaded file is not a direct recovery image or archive.${RESET}\n"
         echo -e "${BOLD}${RED}Please provide a direct .img, .lz4, or .zip download URL instead of a webpage link.${RESET}\n"
         exit 1
-    elif [[ "${FILE_MIME}" == "application/zip" ]] || [[ "${FILE_MIME}" == "application/x-zip" ]] || [[ "${FILE_MIME}" == "application/x-zip-compressed" ]] || [[ "${FILE_INFO}" == Zip\ archive\ data* ]]; then
+    elif unzip -tqq "${FILE}" >/dev/null 2>&1; then
         unzip -o "${FILE}" && rm "${FILE}"
     elif [[ "${FILE_MIME}" == "application/x-lz4" ]] || [[ "${FILE_INFO}" == LZ4\ compressed\ data* ]] || [[ "${FILE}" == *.lz4 ]]; then
         local OUTPUT_FILE="${FILE%.lz4}"
