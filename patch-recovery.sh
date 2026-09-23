@@ -197,7 +197,7 @@ PY
         if [ "${#EXTRACTED_DIRS[@]}" -eq 1 ] && [ "${#EXTRACTED_FILES[@]}" -eq 0 ]; then
             SEARCH_DIR="${EXTRACTED_DIRS[0]}"
         fi
-    elif [[ "${FILE_MIME}" == "application/x-lz4" ]] || [[ "${FILE_INFO}" == LZ4\ compressed\ data* ]] || [[ "${FILE}" == *.lz4 ]]; then
+    elif [[ "${FILE_MIME}" == "application/x-lz4" ]] || [[ "${FILE_INFO}" == LZ4\ compressed\ data* ]]; then
         local OUTPUT_FILE="${FILE%.lz4}"
         [[ "${OUTPUT_FILE}" == "${FILE}" ]] && OUTPUT_FILE="recovery.img"
         if ! lz4 -d "${FILE}" "${OUTPUT_FILE}"; then
