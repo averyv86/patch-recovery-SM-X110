@@ -28,7 +28,7 @@ Use the GitHub Actions workflow to automate the process:
 3. Provide the required inputs:
    - **Model**: Your device's model number.
    - **Recovery Link**: Direct download link to the recovery image.
-   - You can upload the recovery and get a direct link from https://filebin.net/
+   - If you use https://filebin.net/, provide the direct file URL (`https://filebin.net/<bin>/<filename>`), not just the bin page.
 
 - The workflow will generate a patched recovery image and upload it as an artifact.
 - Optionally uploaded to [GoFile](https://gofile.io/) for easy sharing.

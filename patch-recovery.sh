@@ -48,16 +48,34 @@ init_patch_recovery(){
 # Downloading/copying the recovery
 download_recovery(){
     if [[ "${RECOVERY_LINK}" =~ ^https?:// ]]; then
+        if [[ "${RECOVERY_LINK}" =~ ^https?://filebin\.net/([^/?#]+)/?$ ]]; then
+            local FILEBIN_PAGE
+            local FILEBIN_LINK
+            local FILEBIN_BIN="${BASH_REMATCH[1]}"
 
-    echo -e "${LIGHT_YELLOW}[INFO] Downloading:${RESET} ${BOLD}${RECOVERY_LINK}${RESET}\n"
+            FILEBIN_PAGE="$(curl -fsSL "${RECOVERY_LINK}")"
+            FILEBIN_LINK="$(printf '%s' "${FILEBIN_PAGE}" | grep -oE "https?://filebin\\.net/${FILEBIN_BIN}/[^\"'<> ]+" | head -n1)"
 
-    curl -L "${RECOVERY_LINK}" -o "${WDIR}/recovery/$(basename "${RECOVERY_LINK}")"
+            if [ -z "${FILEBIN_LINK}" ]; then
+                FILEBIN_LINK="$(printf '%s' "${FILEBIN_PAGE}" | grep -oE "/${FILEBIN_BIN}/[^\"'<> ]+" | head -n1)"
+                [ -n "${FILEBIN_LINK}" ] && FILEBIN_LINK="https://filebin.net${FILEBIN_LINK}"
+            fi
+
+            if [ -n "${FILEBIN_LINK}" ]; then
+                echo -e "${LIGHT_YELLOW}[INFO] Resolved Filebin page to:${RESET} ${BOLD}${FILEBIN_LINK}${RESET}\n"
+                RECOVERY_LINK="${FILEBIN_LINK}"
+            fi
+        fi
+
+        echo -e "${LIGHT_YELLOW}[INFO] Downloading:${RESET} ${BOLD}${RECOVERY_LINK}${RESET}\n"
+
+        curl -L "${RECOVERY_LINK}" -o "${WDIR}/recovery/$(basename "${RECOVERY_LINK}")"
     elif [ -f "${RECOVERY_LINK}" ]; then
-    cp "${RECOVERY_LINK}" "${WDIR}/recovery/"
+        cp "${RECOVERY_LINK}" "${WDIR}/recovery/"
     else
-    echo -e "${BOLD}${RED}Invalid input: not a URL or file.${RESET}\n"
-    echo -e "${BOLD}${RED}If you entered a URL, make sure it begins with 'http://' or 'https://'${RESET}\n"
-    exit 1
+        echo -e "${BOLD}${RED}Invalid input: not a URL or file.${RESET}\n"
+        echo -e "${BOLD}${RED}If you entered a URL, make sure it begins with 'http://' or 'https://'${RESET}\n"
+        exit 1
     fi
 }
 
@@ -66,13 +84,43 @@ unarchive_recovery(){
 
     set -x 
     cd "${WDIR}/recovery/"
-    local FILE=$(ls)
-    [[ "$FILE" == *.zip ]] && unzip "$FILE" && rm "$FILE"
-    [[ "$FILE" == *.lz4 ]] && lz4 -d "$FILE" "${FILE%.lz4}" && rm "$FILE"
+    local FILE
+    FILE="$(find . -maxdepth 1 -type f ! -name 'recovery.img' -printf '%f\n' | head -n1)"
+
+    if [ -z "${FILE}" ]; then
+        echo -e "${BOLD}${RED}Unable to find a downloaded recovery file.${RESET}\n"
+        exit 1
+    fi
+
+    local FILE_INFO
+    FILE_INFO="$(file -b "${FILE}")"
+
+    if [[ "${FILE}" == *.zip ]] || [[ "${FILE_INFO}" == Zip\ archive\ data* ]]; then
+        unzip -o "${FILE}" && rm "${FILE}"
+    elif [[ "${FILE}" == *.lz4 ]] || [[ "${FILE_INFO}" == LZ4\ compressed\ data* ]]; then
+        local OUTPUT_FILE="${FILE%.lz4}"
+        [[ "${OUTPUT_FILE}" == "${FILE}" ]] && OUTPUT_FILE="recovery.img"
+        lz4 -d "${FILE}" "${OUTPUT_FILE}" && rm "${FILE}"
+    elif [[ "${FILE_INFO}" == HTML\ document* ]] || [[ "${FILE_INFO}" == XML\ 1.0\ document* ]] || [[ "${FILE_INFO}" == ASCII\ text* ]]; then
+        echo -e "${BOLD}${RED}Downloaded file is not a direct recovery image or archive.${RESET}\n"
+        echo -e "${BOLD}${RED}Please provide a direct .img, .lz4, or .zip download URL instead of a webpage link.${RESET}\n"
+        exit 1
+    fi
 
     # Only rename if recovery.img doesn't exists
     if [ ! -f recovery.img ]; then
-        mv "$(ls *.img)" "recovery.img"
+        local IMG_FILE
+        IMG_FILE="$(find . -type f -name '*.img' -print -quit)"
+
+        if [ -n "${IMG_FILE}" ]; then
+            mv "${IMG_FILE}" "recovery.img"
+        elif [ -n "${FILE}" ] && [ -f "${FILE}" ]; then
+            mv "${FILE}" "recovery.img"
+        else
+            echo -e "${BOLD}${RED}Unable to locate a recovery image in the downloaded file.${RESET}\n"
+            echo -e "${BOLD}${RED}Please provide a direct .img, .lz4, or .zip download URL.${RESET}\n"
+            exit 1
+        fi
     fi
 
     cd "${WDIR}/"
