@@ -118,6 +118,10 @@ unarchive_recovery(){
         echo -e "${BOLD}${RED}Please provide a direct .img, .lz4, or .zip download URL instead of a webpage link.${RESET}\n"
         exit 1
     elif unzip -tqq "${FILE}" >/dev/null 2>&1; then
+        if unzip -Z1 "${FILE}" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+            echo -e "${BOLD}${RED}Unsafe ZIP archive paths detected in:${RESET} ${BOLD}${FILE}${RESET}\n"
+            exit 1
+        fi
         unzip -o "${FILE}" && rm "${FILE}"
     elif [[ "${FILE_MIME}" == "application/x-lz4" ]] || [[ "${FILE_INFO}" == LZ4\ compressed\ data* ]] || [[ "${FILE}" == *.lz4 ]]; then
         local OUTPUT_FILE="${FILE%.lz4}"
