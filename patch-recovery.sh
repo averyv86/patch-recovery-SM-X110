@@ -122,7 +122,7 @@ unarchive_recovery(){
             echo -e "${BOLD}${RED}Unsafe ZIP archive paths detected in:${RESET} ${BOLD}${FILE}${RESET}\n"
             exit 1
         fi
-        if zipinfo -l "${FILE}" | tail -n +3 | grep -Eq '^[[:space:]]*l'; then
+        if zipinfo -l "${FILE}" | awk 'NR >= 3 && $1 ~ /^l/ { found = 1 } END { exit !found }'; then
             echo -e "${BOLD}${RED}ZIP archives containing symlinks are not supported:${RESET} ${BOLD}${FILE}${RESET}\n"
             exit 1
         fi
