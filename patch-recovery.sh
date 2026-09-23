@@ -10,6 +10,7 @@ export SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 export WDIR="${SCRIPT_DIR}"
 export RECOVERY_LINK="$1"
 export MODEL="$2"
+export DOWNLOADED_FILE=""
 mkdir -p "recovery" "unpacked" "output"
 source "${WDIR}/binaries/colors"
 source "${WDIR}/binaries/gofile.sh"
@@ -47,6 +48,8 @@ init_patch_recovery(){
 
 # Downloading/copying the recovery
 download_recovery(){
+    local DOWNLOAD_NAME
+
     if [[ "${RECOVERY_LINK}" =~ ^https?:// ]]; then
         if [[ "${RECOVERY_LINK}" =~ ^https?://filebin\.net/([^/?#]+)/?$ ]]; then
             local FILEBIN_PAGE
@@ -69,9 +72,16 @@ download_recovery(){
 
         echo -e "${LIGHT_YELLOW}[INFO] Downloading:${RESET} ${BOLD}${RECOVERY_LINK}${RESET}\n"
 
-        curl -L "${RECOVERY_LINK}" -o "${WDIR}/recovery/$(basename "${RECOVERY_LINK}")"
+        DOWNLOAD_NAME="$(basename "${RECOVERY_LINK%%\?*}")"
+        DOWNLOAD_NAME="${DOWNLOAD_NAME%%\#*}"
+        [ -z "${DOWNLOAD_NAME}" ] && DOWNLOAD_NAME="downloaded-recovery"
+        DOWNLOADED_FILE="${WDIR}/recovery/${DOWNLOAD_NAME}"
+
+        curl -L "${RECOVERY_LINK}" -o "${DOWNLOADED_FILE}"
     elif [ -f "${RECOVERY_LINK}" ]; then
-        cp "${RECOVERY_LINK}" "${WDIR}/recovery/"
+        DOWNLOAD_NAME="$(basename "${RECOVERY_LINK}")"
+        DOWNLOADED_FILE="${WDIR}/recovery/${DOWNLOAD_NAME}"
+        cp "${RECOVERY_LINK}" "${DOWNLOADED_FILE}"
     else
         echo -e "${BOLD}${RED}Invalid input: not a URL or file.${RESET}\n"
         echo -e "${BOLD}${RED}If you entered a URL, make sure it begins with 'http://' or 'https://'${RESET}\n"
@@ -85,9 +95,9 @@ unarchive_recovery(){
     set -x 
     cd "${WDIR}/recovery/"
     local FILE
-    FILE="$(find . -maxdepth 1 -type f ! -name 'recovery.img' -printf '%f\n' | head -n1)"
+    FILE="$(basename "${DOWNLOADED_FILE}")"
 
-    if [ -z "${FILE}" ]; then
+    if [ -z "${FILE}" ] || [ ! -f "${FILE}" ]; then
         echo -e "${BOLD}${RED}Unable to find a downloaded recovery file.${RESET}\n"
         exit 1
     fi
