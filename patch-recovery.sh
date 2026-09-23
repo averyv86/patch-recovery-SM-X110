@@ -112,10 +112,19 @@ unarchive_recovery(){
     # Only rename if recovery.img doesn't exists
     if [ ! -f recovery.img ]; then
         local IMG_FILE
-        IMG_FILE="$(find . -type f -name '*.img' -print -quit)"
+        local IMG_COUNT
+        IMG_FILE="$(find . -type f -name 'recovery.img' -print -quit)"
+        IMG_COUNT="$(find . -type f -name '*.img' | wc -l)"
 
         if [ -n "${IMG_FILE}" ]; then
             mv "${IMG_FILE}" "recovery.img"
+        elif [ "${IMG_COUNT}" = "1" ]; then
+            IMG_FILE="$(find . -type f -name '*.img' -print -quit)"
+            mv "${IMG_FILE}" "recovery.img"
+        elif [ "${IMG_COUNT}" -gt 1 ]; then
+            echo -e "${BOLD}${RED}Found multiple .img files in the downloaded archive.${RESET}\n"
+            echo -e "${BOLD}${RED}Please provide an archive that contains only the recovery image or a direct recovery image URL.${RESET}\n"
+            exit 1
         elif [ -n "${FILE}" ] && [ -f "${FILE}" ]; then
             mv "${FILE}" "recovery.img"
         else
