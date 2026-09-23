@@ -116,6 +116,7 @@ unarchive_recovery(){
     FILE_INFO="$(file -b "${FILE}")"
     local FILE_MIME
     FILE_MIME="$(file -b --mime-type "${FILE}")"
+    local SEARCH_DIR="."
 
     if [[ "${FILE_INFO}" == HTML\ document* ]] || [[ "${FILE_INFO}" == XML\ 1.0\ document* ]] || [[ "${FILE_MIME}" == "text/html" ]] || [[ "${FILE_MIME}" == "application/xhtml+xml" ]] || [[ "${FILE_MIME}" == "text/xml" ]] || [[ "${FILE_MIME}" == "application/xml" ]]; then
         echo -e "${BOLD}${RED}Downloaded file is not a direct recovery image or archive.${RESET}\n"
@@ -194,8 +195,7 @@ PY
         mapfile -t EXTRACTED_FILES < <(find . -mindepth 1 -maxdepth 1 -type f -print)
 
         if [ "${#EXTRACTED_DIRS[@]}" -eq 1 ] && [ "${#EXTRACTED_FILES[@]}" -eq 0 ]; then
-            find "${EXTRACTED_DIRS[0]}" -mindepth 1 -maxdepth 1 -exec mv -- {} . \;
-            rmdir "${EXTRACTED_DIRS[0]}"
+            SEARCH_DIR="${EXTRACTED_DIRS[0]}"
         fi
     elif [[ "${FILE_MIME}" == "application/x-lz4" ]] || [[ "${FILE_INFO}" == LZ4\ compressed\ data* ]] || [[ "${FILE}" == *.lz4 ]]; then
         local OUTPUT_FILE="${FILE%.lz4}"
@@ -214,15 +214,15 @@ PY
     # Only rename if recovery.img doesn't exists
     if [ ! -f recovery.img ]; then
         local IMG_FILE
-        local IMG_COUNT
-        IMG_COUNT="$(find . -maxdepth 1 -type f -name '*.img' | wc -l)"
+        local IMG_FILES=()
+        mapfile -d '' -t IMG_FILES < <(find "${SEARCH_DIR}" -maxdepth 1 -type f -name '*.img' -print0)
 
-        if [ "${IMG_COUNT}" = "1" ]; then
-            IMG_FILE="$(find . -maxdepth 1 -type f -name '*.img' -print -quit)"
+        if [ "${#IMG_FILES[@]}" -eq 1 ]; then
+            IMG_FILE="${IMG_FILES[0]}"
             if [ "${IMG_FILE}" != "./recovery.img" ] && [ "${IMG_FILE}" != "recovery.img" ]; then
                 mv -- "${IMG_FILE}" "recovery.img"
             fi
-        elif [ "${IMG_COUNT}" -gt 1 ]; then
+        elif [ "${#IMG_FILES[@]}" -gt 1 ]; then
             echo -e "${BOLD}${RED}Found multiple .img files in the downloaded archive.${RESET}\n"
             echo -e "${BOLD}${RED}Please provide an archive that contains only the recovery image or a direct recovery image URL.${RESET}\n"
             exit 1
