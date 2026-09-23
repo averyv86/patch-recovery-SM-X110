@@ -130,19 +130,49 @@ import zipfile
 
 with zipfile.ZipFile(sys.argv[1]) as archive:
     seen = set()
+    root_dir = None
+    saw_flat_file = False
+    saw_rooted_file = False
     for info in archive.infolist():
         name = info.filename
         path = pathlib.PurePosixPath(name)
-        parts = path.parts
-        normalized = name.rstrip("/")
+        parts = tuple(part for part in path.parts if part not in ("", "."))
+        is_dir = info.is_dir() or name.endswith("/")
 
         if name.startswith("/") or any(part == ".." for part in parts):
             sys.exit(1)
-        if normalized.startswith("-"):
-            sys.exit(1)
-        if "/" in normalized:
-            sys.exit(1)
         if stat.S_ISLNK(info.external_attr >> 16):
+            sys.exit(1)
+        if not parts:
+            continue
+
+        if is_dir:
+            if len(parts) == 1:
+                if root_dir is None:
+                    root_dir = parts[0]
+                elif root_dir != parts[0]:
+                    sys.exit(1)
+                continue
+            sys.exit(1)
+
+        if len(parts) == 1:
+            normalized = parts[0]
+            saw_flat_file = True
+            if root_dir is not None or saw_rooted_file:
+                sys.exit(1)
+        elif len(parts) == 2:
+            if saw_flat_file:
+                sys.exit(1)
+            saw_rooted_file = True
+            if root_dir is None:
+                root_dir = parts[0]
+            elif root_dir != parts[0]:
+                sys.exit(1)
+            normalized = parts[1]
+        else:
+            sys.exit(1)
+
+        if normalized.startswith("-"):
             sys.exit(1)
         if normalized in seen:
             sys.exit(1)
@@ -152,11 +182,31 @@ PY
             echo -e "${BOLD}${RED}ZIP archive contains unsupported paths or symlink entries:${RESET} ${BOLD}${FILE}${RESET}\n"
             exit 1
         fi
-        unzip -o "${FILE}" && rm "${FILE}"
+        if ! unzip -o "${FILE}"; then
+            echo -e "${BOLD}${RED}Failed to extract ZIP archive:${RESET} ${BOLD}${FILE}${RESET}\n"
+            exit 1
+        fi
+        rm -- "${FILE}"
+
+        local EXTRACTED_DIR
+        local EXTRACTED_DIR_COUNT
+        local EXTRACTED_FILE_COUNT
+        EXTRACTED_DIR="$(find . -mindepth 1 -maxdepth 1 -type d -print -quit)"
+        EXTRACTED_DIR_COUNT="$(find . -mindepth 1 -maxdepth 1 -type d | wc -l)"
+        EXTRACTED_FILE_COUNT="$(find . -mindepth 1 -maxdepth 1 -type f | wc -l)"
+
+        if [ "${EXTRACTED_DIR_COUNT}" = "1" ] && [ "${EXTRACTED_FILE_COUNT}" = "0" ] && [ -n "${EXTRACTED_DIR}" ]; then
+            find "${EXTRACTED_DIR}" -mindepth 1 -maxdepth 1 -exec mv -- {} . \;
+            rmdir "${EXTRACTED_DIR}"
+        fi
     elif [[ "${FILE_MIME}" == "application/x-lz4" ]] || [[ "${FILE_INFO}" == LZ4\ compressed\ data* ]] || [[ "${FILE}" == *.lz4 ]]; then
         local OUTPUT_FILE="${FILE%.lz4}"
         [[ "${OUTPUT_FILE}" == "${FILE}" ]] && OUTPUT_FILE="recovery.img"
-        lz4 -d "${FILE}" "${OUTPUT_FILE}" && rm "${FILE}"
+        if ! lz4 -d "${FILE}" "${OUTPUT_FILE}"; then
+            echo -e "${BOLD}${RED}Failed to decompress LZ4 recovery image:${RESET} ${BOLD}${FILE}${RESET}\n"
+            exit 1
+        fi
+        rm -- "${FILE}"
     elif [[ "${FILE}" != *.img ]] && [[ "${FILE}" != "recovery.img" ]]; then
         echo -e "${BOLD}${RED}Unsupported recovery file type:${RESET} ${BOLD}${FILE}${RESET}\n"
         echo -e "${BOLD}${RED}Please provide a direct .img, .lz4, or .zip download URL.${RESET}\n"
