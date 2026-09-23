@@ -53,7 +53,7 @@ download_recovery(){
 
     curl -fL "${RECOVERY_LINK}" -o "${WDIR}/recovery/downloaded_recovery"
     elif [ -f "${RECOVERY_LINK}" ]; then
-    cp "${RECOVERY_LINK}" "${WDIR}/recovery/"
+    cp "${RECOVERY_LINK}" "${WDIR}/recovery/downloaded_recovery"
     else
     echo -e "${BOLD}${RED}Invalid input: not a URL or file.${RESET}\n"
     echo -e "${BOLD}${RED}If you entered a URL, make sure it begins with 'http://' or 'https://'${RESET}\n"
@@ -66,11 +66,12 @@ unarchive_recovery(){
 
     set -x 
     cd "${WDIR}/recovery/"
-    local FILE="$(find . -maxdepth 1 -type f ! -name '.gitkeep' | head -n1)"
+    local FILE="./downloaded_recovery"
     local FILE_MIME
     local FILE_TYPE
+    local EXTRACTED_ARCHIVE=0
 
-    if [ -z "${FILE}" ]; then
+    if [ ! -f "${FILE}" ]; then
         echo -e "${BOLD}${RED}No recovery file was downloaded or copied.${RESET}\n"
         exit 1
     fi
@@ -84,7 +85,11 @@ unarchive_recovery(){
         exit 1
     fi
 
-    [[ "${FILE_MIME}" == "application/zip" ]] && unzip "$FILE" && rm "$FILE"
+    if [[ "${FILE_MIME}" == "application/zip" ]]; then
+        unzip "$FILE" && rm "$FILE"
+        EXTRACTED_ARCHIVE=1
+    fi
+
     [[ "${FILE_TYPE}" == LZ4\ compressed\ data* ]] && lz4 -d "$FILE" "recovery.img" && rm "$FILE"
 
     # Only rename if recovery.img doesn't exists
@@ -94,7 +99,7 @@ unarchive_recovery(){
 
         if [ -n "${IMG_FILE}" ]; then
             mv "${IMG_FILE}" "recovery.img"
-        elif [[ "${FILE_MIME}" != text/* ]]; then
+        elif [ "${EXTRACTED_ARCHIVE}" -eq 0 ] && [[ "${FILE_MIME}" != text/* ]]; then
             mv "${FILE}" "recovery.img"
         else
             echo -e "${BOLD}${RED}Unable to locate a recovery image after download/extraction.${RESET}\n"
