@@ -113,13 +113,13 @@ unarchive_recovery(){
     if [ ! -f recovery.img ]; then
         local IMG_FILE
         local IMG_COUNT
-        IMG_FILE="$(find . -type f -name 'recovery.img' -print -quit)"
-        IMG_COUNT="$(find . -type f -name '*.img' | wc -l)"
+        IMG_FILE="$(find . -maxdepth 1 -type f -name 'recovery.img' -print -quit)"
+        IMG_COUNT="$(find . -maxdepth 1 -type f -name '*.img' | wc -l)"
 
         if [ -n "${IMG_FILE}" ]; then
             mv "${IMG_FILE}" "recovery.img"
         elif [ "${IMG_COUNT}" = "1" ]; then
-            IMG_FILE="$(find . -type f -name '*.img' -print -quit)"
+            IMG_FILE="$(find . -maxdepth 1 -type f -name '*.img' -print -quit)"
             mv "${IMG_FILE}" "recovery.img"
         elif [ "${IMG_COUNT}" -gt 1 ]; then
             echo -e "${BOLD}${RED}Found multiple .img files in the downloaded archive.${RESET}\n"
