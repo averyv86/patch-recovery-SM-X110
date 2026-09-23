@@ -10,6 +10,7 @@ export SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 export WDIR="${SCRIPT_DIR}"
 export RECOVERY_LINK="$1"
 export MODEL="$2"
+export DOWNLOADED_FILE=""
 mkdir -p "recovery" "unpacked" "output"
 source "${WDIR}/binaries/colors"
 source "${WDIR}/binaries/gofile.sh"
@@ -47,17 +48,54 @@ init_patch_recovery(){
 
 # Downloading/copying the recovery
 download_recovery(){
+    local DOWNLOAD_NAME
+
     if [[ "${RECOVERY_LINK}" =~ ^https?:// ]]; then
+        if [[ "${RECOVERY_LINK}" =~ ^https?://filebin\.net/([^/?#]+)/?$ ]]; then
+            local FILEBIN_PAGE
+            local FILEBIN_LINK
+            local FILEBIN_BIN="${BASH_REMATCH[1]}"
 
-    echo -e "${LIGHT_YELLOW}[INFO] Downloading:${RESET} ${BOLD}${RECOVERY_LINK}${RESET}\n"
+            if ! FILEBIN_PAGE="$(curl -fsSL "${RECOVERY_LINK}")"; then
+                echo -e "${BOLD}${RED}Unable to fetch the Filebin page:${RESET} ${BOLD}${RECOVERY_LINK}${RESET}\n"
+                exit 1
+            fi
+            FILEBIN_LINK="$(printf '%s' "${FILEBIN_PAGE}" | grep -oE 'https?://filebin\.net/[^"'\''<> ]+' | grep -m1 -F "/${FILEBIN_BIN}/" || true)"
 
-    curl -L "${RECOVERY_LINK}" -o "${WDIR}/recovery/$(basename "${RECOVERY_LINK}")"
+            if [ -z "${FILEBIN_LINK}" ]; then
+                FILEBIN_LINK="$(printf '%s' "${FILEBIN_PAGE}" | grep -oE '/[^"'\''<> ]+' | grep -m1 -F "/${FILEBIN_BIN}/" || true)"
+                [ -n "${FILEBIN_LINK}" ] && FILEBIN_LINK="https://filebin.net${FILEBIN_LINK}"
+            fi
+
+            case "${FILEBIN_LINK}" in
+                https://filebin.net/"${FILEBIN_BIN}"/*|http://filebin.net/"${FILEBIN_BIN}"/*)
+                echo -e "${LIGHT_YELLOW}[INFO] Resolved Filebin page to:${RESET} ${BOLD}${FILEBIN_LINK}${RESET}\n"
+                RECOVERY_LINK="${FILEBIN_LINK}"
+                ;;
+            "")
+                ;;
+            *)
+                echo -e "${BOLD}${RED}Resolved Filebin URL is invalid:${RESET} ${BOLD}${FILEBIN_LINK}${RESET}\n"
+                exit 1
+                ;;
+            esac
+        fi
+
+        echo -e "${LIGHT_YELLOW}[INFO] Downloading:${RESET} ${BOLD}${RECOVERY_LINK}${RESET}\n"
+
+        DOWNLOAD_NAME="$(basename "${RECOVERY_LINK%%[\?#]*}")"
+        [ -z "${DOWNLOAD_NAME}" ] && DOWNLOAD_NAME="downloaded-recovery"
+        DOWNLOADED_FILE="${WDIR}/recovery/${DOWNLOAD_NAME}"
+
+        curl -fL "${RECOVERY_LINK}" -o "${DOWNLOADED_FILE}"
     elif [ -f "${RECOVERY_LINK}" ]; then
-    cp "${RECOVERY_LINK}" "${WDIR}/recovery/"
+        DOWNLOAD_NAME="$(basename "${RECOVERY_LINK}")"
+        DOWNLOADED_FILE="${WDIR}/recovery/${DOWNLOAD_NAME}"
+        cp "${RECOVERY_LINK}" "${DOWNLOADED_FILE}"
     else
-    echo -e "${BOLD}${RED}Invalid input: not a URL or file.${RESET}\n"
-    echo -e "${BOLD}${RED}If you entered a URL, make sure it begins with 'http://' or 'https://'${RESET}\n"
-    exit 1
+        echo -e "${BOLD}${RED}Invalid input: not a URL or file.${RESET}\n"
+        echo -e "${BOLD}${RED}If you entered a URL, make sure it begins with 'http://' or 'https://'${RESET}\n"
+        exit 1
     fi
 }
 
@@ -66,13 +104,145 @@ unarchive_recovery(){
 
     set -x 
     cd "${WDIR}/recovery/"
-    local FILE=$(ls)
-    [[ "$FILE" == *.zip ]] && unzip "$FILE" && rm "$FILE"
-    [[ "$FILE" == *.lz4 ]] && lz4 -d "$FILE" "${FILE%.lz4}" && rm "$FILE"
+    local FILE
+    FILE="$(basename "${DOWNLOADED_FILE}")"
+
+    if [ -z "${FILE}" ] || [ ! -f "${FILE}" ]; then
+        echo -e "${BOLD}${RED}Unable to find a downloaded recovery file.${RESET}\n"
+        exit 1
+    fi
+
+    local FILE_INFO
+    FILE_INFO="$(file -b "${FILE}")"
+    local FILE_MIME
+    FILE_MIME="$(file -b --mime-type "${FILE}")"
+    local SEARCH_DIR="."
+
+    if [[ "${FILE_INFO}" == HTML\ document* ]] || [[ "${FILE_INFO}" == XML\ 1.0\ document* ]] || [[ "${FILE_MIME}" == "text/html" ]] || [[ "${FILE_MIME}" == "application/xhtml+xml" ]] || [[ "${FILE_MIME}" == "text/xml" ]] || [[ "${FILE_MIME}" == "application/xml" ]]; then
+        echo -e "${BOLD}${RED}Downloaded file is not a direct recovery image or archive.${RESET}\n"
+        echo -e "${BOLD}${RED}Please provide a direct .img, .lz4, or .zip download URL instead of a webpage link.${RESET}\n"
+        exit 1
+    elif [[ "${FILE_MIME}" == "application/zip" ]] || [[ "${FILE_INFO}" == Zip\ archive\ data* ]]; then
+        if ! command -v unzip >/dev/null 2>&1; then
+            echo -e "${BOLD}${RED}Missing required tool:${RESET} ${BOLD}unzip${RESET}\n"
+            exit 1
+        fi
+        if ! unzip -tqq "${FILE}" >/dev/null 2>&1; then
+            echo -e "${BOLD}${RED}Failed to validate ZIP archive:${RESET} ${BOLD}${FILE}${RESET}\n"
+            exit 1
+        fi
+        if ! python3 - "${FILE}" <<'PY'
+import pathlib
+import stat
+import sys
+import zipfile
+
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    seen = set()
+    root_dir = None
+    saw_flat_file = False
+    saw_rooted_file = False
+    for info in archive.infolist():
+        name = info.filename
+        path = pathlib.PurePosixPath(name)
+        parts = tuple(part for part in path.parts if part not in ("", "."))
+        is_dir = info.is_dir() or name.endswith("/")
+
+        if name.startswith("/") or any(part == ".." for part in parts):
+            sys.exit(1)
+        if stat.S_ISLNK(info.external_attr >> 16):
+            sys.exit(1)
+        if not parts:
+            continue
+
+        if is_dir:
+            if len(parts) == 1:
+                if root_dir is None:
+                    root_dir = parts[0]
+                elif root_dir != parts[0]:
+                    sys.exit(1)
+                continue
+            sys.exit(1)
+
+        if len(parts) == 1:
+            normalized = parts[0]
+            saw_flat_file = True
+            if root_dir is not None or saw_rooted_file:
+                sys.exit(1)
+        elif len(parts) == 2:
+            if saw_flat_file:
+                sys.exit(1)
+            saw_rooted_file = True
+            if root_dir is None:
+                root_dir = parts[0]
+            elif root_dir != parts[0]:
+                sys.exit(1)
+            normalized = parts[1]
+        else:
+            sys.exit(1)
+
+        if normalized.startswith("-"):
+            sys.exit(1)
+        if normalized in seen:
+            sys.exit(1)
+        seen.add(normalized)
+PY
+        then
+            echo -e "${BOLD}${RED}ZIP archive contains unsupported paths or symlink entries:${RESET} ${BOLD}${FILE}${RESET}\n"
+            exit 1
+        fi
+        if ! unzip -o "${FILE}"; then
+            echo -e "${BOLD}${RED}Failed to extract ZIP archive:${RESET} ${BOLD}${FILE}${RESET}\n"
+            exit 1
+        fi
+        rm -- "${FILE}"
+
+        local EXTRACTED_DIRS=()
+        local EXTRACTED_FILES=()
+        mapfile -t EXTRACTED_DIRS < <(find . -mindepth 1 -maxdepth 1 -type d -print)
+        mapfile -t EXTRACTED_FILES < <(find . -mindepth 1 -maxdepth 1 -type f -print)
+
+        if [ "${#EXTRACTED_DIRS[@]}" -eq 1 ] && [ "${#EXTRACTED_FILES[@]}" -eq 0 ]; then
+            SEARCH_DIR="${EXTRACTED_DIRS[0]}"
+        fi
+    elif [[ "${FILE_MIME}" == "application/x-lz4" ]] || [[ "${FILE_INFO}" == LZ4\ compressed\ data* ]]; then
+        if ! command -v lz4 >/dev/null 2>&1; then
+            echo -e "${BOLD}${RED}Missing required tool:${RESET} ${BOLD}lz4${RESET}\n"
+            exit 1
+        fi
+        local OUTPUT_FILE="${FILE%.lz4}"
+        [[ "${OUTPUT_FILE}" == "${FILE}" ]] && OUTPUT_FILE="recovery.img"
+        if ! lz4 -d "${FILE}" "${OUTPUT_FILE}"; then
+            echo -e "${BOLD}${RED}Failed to decompress LZ4 recovery image:${RESET} ${BOLD}${FILE}${RESET}\n"
+            exit 1
+        fi
+        rm -- "${FILE}"
+    elif [[ "${FILE}" != *.img ]] && [[ "${FILE}" != "recovery.img" ]]; then
+        echo -e "${BOLD}${RED}Unsupported recovery file type:${RESET} ${BOLD}${FILE}${RESET}\n"
+        echo -e "${BOLD}${RED}Please provide a direct .img, .lz4, or .zip download URL.${RESET}\n"
+        exit 1
+    fi
 
     # Only rename if recovery.img doesn't exists
     if [ ! -f recovery.img ]; then
-        mv "$(ls *.img)" "recovery.img"
+        local IMG_FILE
+        local IMG_FILES=()
+        mapfile -d '' -t IMG_FILES < <(find "${SEARCH_DIR}" -maxdepth 1 -type f -name '*.img' -print0)
+
+        if [ "${#IMG_FILES[@]}" -eq 1 ]; then
+            IMG_FILE="${IMG_FILES[0]}"
+            if [ "${IMG_FILE}" != "./recovery.img" ] && [ "${IMG_FILE}" != "recovery.img" ]; then
+                mv -- "${IMG_FILE}" "recovery.img"
+            fi
+        elif [ "${#IMG_FILES[@]}" -gt 1 ]; then
+            echo -e "${BOLD}${RED}Found multiple .img files in the downloaded archive.${RESET}\n"
+            echo -e "${BOLD}${RED}Please provide an archive that contains only the recovery image or a direct recovery image URL.${RESET}\n"
+            exit 1
+        else
+            echo -e "${BOLD}${RED}Unable to locate a recovery image in the downloaded file.${RESET}\n"
+            echo -e "${BOLD}${RED}Please provide a direct .img, .lz4, or .zip download URL.${RESET}\n"
+            exit 1
+        fi
     fi
 
     cd "${WDIR}/"
